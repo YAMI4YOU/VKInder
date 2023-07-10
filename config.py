@@ -1,7 +1,7 @@
 group_token = ''
 access_token = ''
 # количество пользователей для выдачи
-count = 1000
+count = 50
 
 
 explorer_scopes  = [

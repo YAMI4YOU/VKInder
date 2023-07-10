@@ -1,8 +1,10 @@
+from typing import Tuple, List, Any
+
 import vk_api
 from config import count
 from config import (
     explorer_scopes, explorer_data,
-    all_partner_data, male_sex_terms,female_sex_terms,potential_relationships
+    all_partner_data, male_sex_terms, female_sex_terms, potential_relationships
 )
 from database import add_pair, check_pair_exist, create_database
 from VkApi import VkApi
@@ -103,7 +105,7 @@ class VkBot(VkApi):
                         self.send_message(
                             vk_event.user_id,
                             "Извините за недостаток информации. Пожалуйста, предоставьте дополнительные детали или "
-                            "уточните, что именно вам требуется, чтобы я мог помочь Вам правильно "
+                            "уточните, что именно вам требуется, чтобы я мог помочь вам правильно "
                         )
                         self.send_message(
                             vk_event.user_id,
@@ -163,30 +165,38 @@ class VkBot(VkApi):
 
         return explorer_data
 
-    def find_matching_couples(
-            self, bdate: int, sex: int, city_id: int, relation: str,
-            count: int) -> list:
+    def find_matching_couples(self, bdate: int, sex: int, city_id: int, relation: str, count: int, offset=0) -> tuple[
+        Any, int]:
         """Находим подходящих людей"""
-        if int(sex) == 1:
-            sex = 2
+        if sex == 1:
+            opposite_sex = 2
         else:
-            sex = 1
-        couples = self.search_users(bdate, sex, city_id, relation, count)
+            opposite_sex = 1
 
-        for elem in couples["items"]:
+        couples = self.search_users(bdate, opposite_sex, city_id, relation, count, offset=offset)
+        if not couples:
+            raise ValueError
+        for elem in couples:
             couple_info_temp = {"first_name": elem["first_name"], "last_name": elem["last_name"], "id": elem["id"]}
             all_partner_data.append(couple_info_temp)
 
         return all_partner_data
 
     def show_couple_information(self, couple_info: dict) -> str:
+        vk_event = self.listen_for_response()
         """Собираем пользователю информацию о подходящей паре"""
-        res = (
-            f"{couple_info['first_name']} {couple_info['last_name']}\n"
-            f"https://vk.com/id{couple_info['id']}"
-        )
+        try:
+            res = (
+                f"{couple_info['first_name']} {couple_info['last_name']}\n"
+                f"https://vk.com/id{couple_info['id']}"
+            )
 
-        return res
+            return res
+        except ValueError:
+            self.send_message(
+                vk_event[1].user_id,
+                "Ошибка при выполнении запроса"
+            )
 
     def get_photos(self, couple_id: int) -> str:
 
@@ -240,8 +250,8 @@ class VkBot(VkApi):
         else:
             self.send_message(
                 vk_event.user_id,
-                'Извините за неудобство. Давайте продолжим. Пожалуйста, продолжайте со следующего шагом,'
-                'написав "далее".Сообщите "остановить", если хотите прекратить общение '
+                'Извините за неудобство. Давайте продолжим. Пожалуйста, продолжайте со следующим шагом,'
+                'написав "далее". Сообщите "остановить", если хотите прекратить общение '
             )
             res = self.search_for_user_input()
 
@@ -253,7 +263,7 @@ class VkBot(VkApi):
 
         if request == "привет":
 
-            self.send_message(vk_event.user_id, f"Приветствую, {vk_event.user_id}")
+            self.send_message(vk_event.user_id, f"Хай, {vk_event.user_id}")
             self.send_message(
                 vk_event.user_id,
                 """Вот мои команды:
@@ -286,15 +296,24 @@ class VkBot(VkApi):
             self.send_message(vk_event.user_id, "Информации достаточно,чтобы найти пару")
 
             # Ищем пользователю подходящих людей предоставленной информации
-            couple_info_list = self.find_matching_couples(
-                explorer_data["bdate"],
-                explorer_data["sex"],
-                explorer_data["city_id"],
-                explorer_data["relation"],
-                count
-            )
+            try:
+                couple_info_list = self.find_matching_couples(
+                    explorer_data["bdate"],
+                    explorer_data["sex"],
+                    explorer_data["city_id"],
+                    explorer_data["relation"],
+                    count
+                )
+            except ValueError:
+                self.send_message(
+                    vk_event.user_id,
+                    "Анкет больше нет!"
+                )
 
+            offset = 0
+            count_ankets = 0
             for elem in couple_info_list:
+                count_ankets += 1
 
                 if check_pair_exist(elem.get("id")):
                     self.send_message(
@@ -336,13 +355,30 @@ class VkBot(VkApi):
                 )
                 res = self.search_for_user_input()
                 if res == "next":
+                    if count_ankets == count:
+                        count_ankets = 0
+                        offset += count
+                        try:
+                            couple_info_list = self.find_matching_couples(
+                                explorer_data["bdate"],
+                                explorer_data["sex"],
+                                explorer_data["city_id"],
+                                explorer_data["relation"],
+                                count,
+                                offset
+                            )
+                        except ValueError:
+                            self.send_message(
+                                vk_event.user_id,
+                                "Анкет больше нет!"
+                            )
                     continue
                 elif res == "stop":
                     break
 
             self.send_message(
                 vk_event.user_id,
-                "Возвращайтесь в любое время, и я с удовольствием буду помогать Вам. Удачи!"
+                "Возвращайтесь в любое время, и я с удовольствием буду помогать вам. Удачи!"
             )
 
         else:
