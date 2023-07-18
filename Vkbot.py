@@ -1,10 +1,8 @@
-from typing import Tuple, List, Any
-
 import vk_api
 from config import count
 from config import (
     explorer_scopes, explorer_data,
-    all_partner_data, male_sex_terms, female_sex_terms, potential_relationships
+    all_partner_data, male_sex_terms,female_sex_terms,potential_relationships
 )
 from database import add_pair, check_pair_exist, create_database
 from VkApi import VkApi
@@ -165,25 +163,24 @@ class VkBot(VkApi):
 
         return explorer_data
 
-    def find_matching_couples(self, bdate: int, sex: int, city_id: int, relation: str, count: int, offset=0) -> tuple[
-        Any, int]:
+    def find_matching_couples(
+            self, bdate: int, sex: int, city_id: int, relation: str,
+            count: int,offset: int) -> list:
         """Находим подходящих людей"""
-        if sex == 1:
-            opposite_sex = 2
+        if int(sex) == 1:
+            sex = 2
         else:
-            opposite_sex = 1
+            sex = 1
+        couples = self.search_users(bdate, sex, city_id, relation, count, offset)
 
-        couples = self.search_users(bdate, opposite_sex, city_id, relation, count, offset=offset)
-        if not couples:
-            raise ValueError
-        for elem in couples:
+        all_partner_data = []
+        for elem in couples["items"]:
             couple_info_temp = {"first_name": elem["first_name"], "last_name": elem["last_name"], "id": elem["id"]}
             all_partner_data.append(couple_info_temp)
 
         return all_partner_data
 
     def show_couple_information(self, couple_info: dict) -> str:
-        vk_event = self.listen_for_response()
         """Собираем пользователю информацию о подходящей паре"""
         try:
             res = (
@@ -192,11 +189,9 @@ class VkBot(VkApi):
             )
 
             return res
-        except ValueError:
-            self.send_message(
-                vk_event[1].user_id,
-                "Ошибка при выполнении запроса"
-            )
+        except vk_api.ApiError as e:
+            print(f"Произошла ошибка VK API: {str(e)}")
+            return []
 
     def get_photos(self, couple_id: int) -> str:
 
@@ -283,6 +278,7 @@ class VkBot(VkApi):
             # Обнуляем предыдущий поиск.
             # Уже выданные пользователи сохранены в БД.
             couple_info_list = list()
+            offset = 0  # Смещение для следующего запроса
 
             # Собираем информацию от пользователя
             self.send_message(
@@ -296,24 +292,18 @@ class VkBot(VkApi):
             self.send_message(vk_event.user_id, "Информации достаточно,чтобы найти пару")
 
             # Ищем пользователю подходящих людей предоставленной информации
-            try:
-                couple_info_list = self.find_matching_couples(
+            while len(couple_info_list) < count:
+                couple_info_list += self.find_matching_couples(
                     explorer_data["bdate"],
                     explorer_data["sex"],
                     explorer_data["city_id"],
                     explorer_data["relation"],
-                    count
+                    count,
+                    offset
                 )
-            except ValueError:
-                self.send_message(
-                    vk_event.user_id,
-                    "Анкет больше нет!"
-                )
+                offset += count
 
-            offset = 0
-            count_ankets = 0
             for elem in couple_info_list:
-                count_ankets += 1
 
                 if check_pair_exist(elem.get("id")):
                     self.send_message(
@@ -355,23 +345,6 @@ class VkBot(VkApi):
                 )
                 res = self.search_for_user_input()
                 if res == "next":
-                    if count_ankets == count:
-                        count_ankets = 0
-                        offset += count
-                        try:
-                            couple_info_list = self.find_matching_couples(
-                                explorer_data["bdate"],
-                                explorer_data["sex"],
-                                explorer_data["city_id"],
-                                explorer_data["relation"],
-                                count,
-                                offset
-                            )
-                        except ValueError:
-                            self.send_message(
-                                vk_event.user_id,
-                                "Анкет больше нет!"
-                            )
                     continue
                 elif res == "stop":
                     break

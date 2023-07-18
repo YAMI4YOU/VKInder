@@ -21,8 +21,8 @@ class VkApi:
                         text = event.text.lower()
 
                         return text, event
-        except Exception as e:
-            print("Ошибка при выполнении запроса:", e)
+        except vk_api.ApiError as e:
+            print(f"Произошла ошибка VK API: {str(e)}")
             return []
 
     def send_message(self, user_id: str, message: str) -> int:
@@ -37,8 +37,8 @@ class VkApi:
                 }
             )
             return res
-        except Exception as e:
-            print("Ошибка при выполнении запроса:", e)
+        except vk_api.ApiError as e:
+            print(f"Произошла ошибка VK API: {str(e)}")
             return []
 
     def get_user_info(self, seeker: str) -> list:
@@ -52,13 +52,13 @@ class VkApi:
                 }
             )
             return res
-        except Exception as e:
-            print("Ошибка при выполнении запроса:", e)
+        except vk_api.ApiError as e:
+            print(f"Произошла ошибка VK API: {str(e)}")
             return []
 
     def search_users(
             self, bdate: int, sex: int, city_id: int, relation: int,
-            count: int) -> dict:
+            count: int, offset: int) -> dict:
         """Ищем подходящие пары для пользователя"""
         try:
             res = self.vk_seeker.method(
@@ -68,25 +68,29 @@ class VkApi:
                     "city": city_id,
                     "sex": sex,
                     "count": count,
+                    "offset": offset,
                     "status": relation,
                     "birth_year": bdate,
                     "has_photo": 1
                 }
             )
             return res
-        except Exception as e:
-            print("Ошибка при выполнении запроса:", e)
+        except vk_api.ApiError as e:
+            print(f"Произошла ошибка VK API: {str(e)}")
             return []
 
     def get_city_info(self, city: str) -> dict:
         """Находим id города по его названию"""
-        res = self.vk_seeker.method("database.getCities", {"q": city, })
-        return res
+        try:
+            res = self.vk_seeker.method("database.getCities", {"q": city, })
+            return res
+        except vk_api.ApiError as e:
+            print(f"Произошла ошибка VK API: {str(e)}")
+            return []
 
     def photos_get(self, couple_id: int) -> dict:
         """Получает информацию о фотографиях пары"""
-        try:
-            res = self.vk_seeker.method(
+        res = self.vk_seeker.method(
                 "photos.get",
                 {
                     "owner_id": couple_id,
@@ -95,7 +99,4 @@ class VkApi:
                     "extended": 1
                 }
             )
-            return res
-        except Exception as e:
-            print("Ошибка при выполнении запроса:", e)
-            return []
+        return res
